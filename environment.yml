@@ -1,0 +1,12 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - tensorflow
+  - pandas
+  - numpy
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - bokeh
+  - tqdm
