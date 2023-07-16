@@ -9,7 +9,7 @@ class Five_Fold_Stratification:
     ):
         self.df = df
 
-    def verify_model_on_folds(self, model_args, output_cols):
+    def verify_model_on_folds(self, use_model_args, output_cols):
         df = self.df.copy().sample(frac=1).reset_index(drop=True)
         df["fold"] = df.index.map(lambda x: math.floor(x % 5))
         score_sum = 0
@@ -19,7 +19,7 @@ class Five_Fold_Stratification:
             del df_validate["fold"]
             del df_train_test["fold"]
             model = Use_Model(
-                df_train_test, output_cols=output_cols, **model_args
+                df_train_test, output_cols=output_cols, **use_model_args
             )
             model.fit(df_train_test, verbose="silent")
             validation = model.validate(df_validate, verbose="silent")

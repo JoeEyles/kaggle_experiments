@@ -1,3 +1,7 @@
 do some parallel running
 
 try another model!
+
+optimise model without stratification, since that might be polluting
+
+https://towardsdatascience.com/boruta-explained-the-way-i-wish-someone-explained-it-to-me-4489d70e154a

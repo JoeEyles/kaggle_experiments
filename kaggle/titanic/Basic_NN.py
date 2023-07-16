@@ -2,6 +2,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 
+from models import make_NN_model
+
 
 class Use_Model:
     def __init__(
@@ -11,8 +13,8 @@ class Use_Model:
         scale_output=False,
         feature_cols=[],
         scaler_class=StandardScaler,
-        model=None,
-        hidden_layers_shape=[],
+        model=make_NN_model,
+        model_args={},
         seed=42,
         metrics=["accuracy"],
         fill_cols=[],
@@ -30,10 +32,13 @@ class Use_Model:
             df, output_cols, feature_cols
         )
 
-        if model:
-            self.model = model
-        else:
-            self.model = _make_model(self, hidden_layers_shape, metrics)
+        self.model = model(
+            self.feature_cols,
+            self.output_cols,
+            metrics,
+            seed,
+            **model_args,
+        )
 
         self.feature_scaler = scaler_class()
         if scale_output:
@@ -41,10 +46,12 @@ class Use_Model:
 
     def fit(self, in_train_test_df=None, reset_model=True, verbose="auto"):
         if in_train_test_df is None:
-            in_train_test_df = self.train_test_df
-        in_train_test_df.reset_index(inplace=True, drop=True)
+            train_test_df = self.train_test_df.copy()
+        else:
+            train_test_df = in_train_test_df.copy()
+        train_test_df.reset_index(inplace=True, drop=True)
         train_test_df, self.fill_cols = _fill_cols(
-            in_train_test_df, self.fill_cols, fit=True
+            train_test_df, self.fill_cols, fit=True
         )
         train_test_df, self.feature_scaler = _scale_df(
             self.feature_scaler,
@@ -67,11 +74,11 @@ class Use_Model:
 
     def validate(self, in_validate_df=None, verbose="auto"):
         if in_validate_df is None:
-            in_validate_df = self.validate_df
-        in_validate_df.reset_index(inplace=True, drop=True)
-        validate_df, self.fill_cols = _fill_cols(
-            in_validate_df, self.fill_cols
-        )
+            validate_df = self.validate_df.copy()
+        else:
+            validate_df = in_validate_df.copy()
+        validate_df.reset_index(inplace=True, drop=True)
+        validate_df, self.fill_cols = _fill_cols(validate_df, self.fill_cols)
         validate_df, _ = _scale_df(
             self.feature_scaler, validate_df, self.feature_cols_to_scale
         )
@@ -87,10 +94,12 @@ class Use_Model:
 
     def predict(self, in_predict_df=None, verbose="auto"):
         if in_predict_df is None:
-            in_predict_df = self.validate_df
-        in_predict_df.reset_index(inplace=True, drop=True)
+            predict_df = self.validate_df.copy()
+        else:
+            predict_df = in_predict_df.copy()
+        predict_df.reset_index(inplace=True, drop=True)
         predict_df = _add_missing_one_hot_encoded_cols(
-            in_predict_df, self.feature_cols
+            predict_df, self.feature_cols
         )
         predict_df, self.fill_cols = _fill_cols(predict_df, self.fill_cols)
         predict_df, _ = _scale_df(
@@ -112,8 +121,9 @@ class Use_Model:
                 output_df,
                 self.output_cols_to_scale,
             )
-        output_df = output_df.join(predict_df)
-        return output_df
+        # output_df = output_df.join(predict_df)
+        predict_df[self.output_cols] = output_df[self.output_cols]
+        return predict_df
 
 
 def _add_missing_one_hot_encoded_cols(in_predict_df, feature_cols):
@@ -131,6 +141,8 @@ def _split_train_test_validate(df, seed):
 
 
 def _scale_df(scaler, df, cols, fit=False):
+    if not cols:
+        return df, scaler
     scaled_df = df.copy()
     if fit:
         scaler.fit(scaled_df[cols].values)
@@ -142,8 +154,13 @@ def _scale_df(scaler, df, cols, fit=False):
 
 
 def _unscale_df(scaler, df, cols):
+    if not cols:
+        return df
     unscaled_data = scaler.inverse_transform(df[cols].values)
-    return pd.DataFrame(unscaled_data, columns=cols)
+    new_df = pd.DataFrame(unscaled_data, columns=cols)
+    for col in cols:
+        df[col] = new_df[col]
+    return df
 
 
 def _fill_cols(df, fill_cols, fit=False):
@@ -192,20 +209,3 @@ def get_feature_cols(df, output_cols, feature_cols=[]):
     ]
     feature_cols_to_scale = _guess_cols_to_scale(df, numeric_feature_cols)
     return feature_cols, feature_cols_to_scale
-
-
-def _make_model(self, hidden_layers_shape, metrics):
-    n_inputs = len(self.feature_cols)
-    n_outputs = len(self.output_cols)
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Dense(n_inputs, activation="relu"))
-    for layer in hidden_layers_shape:
-        model.add(tf.keras.layers.Dense(layer, activation="relu"))
-    model.add(tf.keras.layers.Dense(n_outputs, activation="sigmoid"))
-
-    model.compile(
-        optimizer="adam",
-        loss="binary_crossentropy",
-        metrics=metrics,
-    )
-    return model

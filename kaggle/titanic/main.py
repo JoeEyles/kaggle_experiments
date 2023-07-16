@@ -1,9 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-
-import tensorflow as tf
+from random import random
 
 from Basic_NN import Use_Model
+from models import make_RF_model, make_NN_model
 from Hyperparameter_Optimiser import Hyperparameter_Optimiser
 from Five_Fold_Stratification import Five_Fold_Stratification
 from Feature_Importance import Feature_Importance_Finder
@@ -17,9 +17,6 @@ from feature_munger import (
 )
 
 
-from random import random
-
-
 def main():
     in_filepath = "kaggle_experiments/kaggle/titanic/data/train.csv"
     df = load_data(in_filepath)
@@ -28,14 +25,110 @@ def main():
     # df_train_test_validate = df.sample(frac=0.8, random_state=42)
     # df_final_validate = df.drop(df_train_test_validate.index)
 
-    # feature_importance(df)
-    # train_validate_predict(df)
-    # optimise_model(df)
-    # stratify_test(df)
-    make_submission(df)
+    # train_validate_predict(
+    #     df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
+    # )
+    # optimise_model(
+    #     df,
+    #     model=make_NN_model,
+    #     model_args_range={"n_layers": [1, 2, 3], "n_nodes": [10, 15, 20]},
+    # )
+    # feature_importance(
+    #     df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
+    # )
+    make_submission(
+        df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
+    )
+
+    # train_validate_predict(
+    #     df,
+    #     model=make_RF_model,
+    #     model_args={"n_estimators": 100, "max_features": None},
+    # )
+    # optimise_model(
+    #     df,
+    #     model=make_RF_model,
+    #     model_args_range={
+    #         "n_estimators": [
+    #             50,
+    #             100,
+    #             500,
+    #             1000,
+    #             1500,
+    #         ],
+    #         "max_features": [5, 10, 20, 30, 42],
+    #     },
+    # )
+    feature_importance(
+        df,
+        model=make_RF_model,
+        model_args={"n_estimators": 1000, "max_features": None},
+    )
 
 
-def make_submission(train_df):
+def optimise_model(df, model=make_NN_model, model_args_range={}):
+    optimser = Hyperparameter_Optimiser(
+        df,
+        output_cols=["Survived"],
+        use_model_args={
+            "fill_cols": [
+                {
+                    "col": "Age",
+                    "method": fill_nans_with_mean,
+                    "train_test_value": None,
+                },
+            ],
+            "model": model,
+        },
+    )
+    matrix_data = optimser.get_best_params(
+        model_args_range=model_args_range,
+        metric="accuracy",
+        metric_smaller_better=False,
+    )
+
+    # TODO: the below belongs inside the optimiser class
+    # print(matrix_data)
+    # plt.scatter(
+    #     matrix_data["n_layers"],
+    #     matrix_data["n_nodes"],
+    #     c=matrix_data["validation"],
+    #     cmap="jet",
+    # )
+    # plt.xlabel("n_layers")
+    # plt.ylabel("n_nodes")
+    # plt.title("Hyperparameter Matrix Plot")
+    # plt.colorbar(label="Accuracy")
+    # plt.savefig(
+    #     "kaggle_experiments/kaggle/titanic/data_exploration/test_hyperparameter_matrix_plot.png"
+    # )  # Save the plot as an image file
+
+    # print(f"Best choice is {best_choice}")
+
+
+def train_validate_predict(df, model=make_NN_model, model_args={}):
+    model = Use_Model(
+        df,
+        output_cols=[
+            "Survived",
+        ],
+        model=model,
+        model_args=model_args,
+        fill_cols=[
+            {
+                "col": "Age",
+                "method": fill_nans_with_mean,
+                "train_test_value": None,
+            },
+        ],
+    )
+    fit_history = model.fit()
+    validation = model.validate()
+    print(validation)
+    make_and_evaluate_prediction(model)
+
+
+def make_submission(train_df, model, model_args):
     in_filepath = "kaggle_experiments/kaggle/titanic/data/test.csv"
     test_df = load_data(in_filepath)
     model = Use_Model(
@@ -43,7 +136,8 @@ def make_submission(train_df):
         output_cols=[
             "Survived",
         ],
-        hidden_layers_shape=[182] * 5,
+        model=model,
+        model_args=model_args,
         fill_cols=[
             {
                 "col": "Age",
@@ -61,18 +155,17 @@ def make_submission(train_df):
     )
     prediction_df["PassengerId"] = prediction_df["PassengerId"].astype(int)
     submission_df = prediction_df[["PassengerId", "Survived"]]
-    submission_df.to_csv(
-        "kaggle_experiments/kaggle/titanic/submissions/first_NN.csv",
-        index=False,
-    )
+    # submission_df.to_csv(
+    #     "kaggle_experiments/kaggle/titanic/submissions/first_NN.csv",
+    #     index=False,
+    # )
 
 
-def feature_importance(df):
+def feature_importance(df, model=make_NN_model, model_args={}):
     finder = Feature_Importance_Finder(
         df,
         output_cols=["Survived"],
-        model_args={
-            "hidden_layers_shape": [10, 10, 10],
+        use_model_args={
             "fill_cols": [
                 {
                     "col": "Age",
@@ -80,9 +173,15 @@ def feature_importance(df):
                     "train_test_value": None,
                 },
             ],
+            # "feature_cols": ["Age", "SibSp", "Parch", "Sex_female"],
         },
     )
-    baseline, results_df = finder.get_feaure_importance()
+    baseline, results_df = finder.get_feaure_importance(
+        model_args=model_args,
+        model=model,
+        stratify=True,
+    )
+    # TODO: put the below into the Feature_Importance_Finder class
     results_df_sorted = results_df.sort_values("importance", ascending=False)
     plt.bar(results_df_sorted["feature"], results_df_sorted["importance"])
     plt.xlabel("Feature")
@@ -91,108 +190,8 @@ def feature_importance(df):
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.savefig(
-        "kaggle_experiments/kaggle/titanic/data_exploration/feature_importance.png"
+        "kaggle_experiments/kaggle/titanic/data_exploration/test_feature_importance.png"
     )  # Save the plot as an
-
-
-def stratify_test(df):
-    stratifier = Five_Fold_Stratification(
-        df,
-    )
-    score = stratifier.verify_model_on_folds(
-        output_cols=["Survived"],
-        model_args={
-            "hidden_layers_shape": [10, 10, 10],
-            "fill_cols": [
-                {
-                    "col": "Age",
-                    "method": fill_nans_with_mean,
-                    "train_test_value": None,
-                },
-            ],
-        },
-    )
-    print(score)
-
-
-def optimise_model(df):
-    optimser = Hyperparameter_Optimiser(
-        df,
-        output_cols=["Survived"],
-        model_args={
-            "fill_cols": [
-                {
-                    "col": "Age",
-                    "method": fill_nans_with_mean,
-                    "train_test_value": None,
-                },
-            ],
-        },
-    )
-    best_choice, matrix_data = optimser.get_best_params(
-        # small_search
-        3,
-        6,
-        1,
-        165,
-        185,
-        1,
-        # medium_search
-        # 2,
-        # 8,
-        # 1,
-        # 100,
-        # 200,
-        # 10,
-        # big_search
-        # 1,
-        # 21,
-        # 3,
-        # 5,
-        # 155,
-        # 10,
-        metric="accuracy",
-        metric_smaller_better=False,
-    )
-
-    # TODO: the below belongs inside the optimiser class
-    print(matrix_data)
-    plt.scatter(
-        matrix_data["n_layers"],
-        matrix_data["n_nodes"],
-        c=matrix_data["validation"],
-        cmap="jet",
-    )
-    plt.xlabel("n_layers")
-    plt.ylabel("n_nodes")
-    plt.title("Hyperparameter Matrix Plot")
-    plt.colorbar(label="Accuracy")
-    plt.savefig(
-        "kaggle_experiments/kaggle/titanic/data_exploration/hyperparameter_matrix_plot.png"
-    )  # Save the plot as an image file
-
-    print(f"Best choice is {best_choice}")
-
-
-def train_validate_predict(df):
-    model = Use_Model(
-        df,
-        output_cols=[
-            "Survived",
-        ],
-        hidden_layers_shape=[180] * 5,
-        fill_cols=[
-            {
-                "col": "Age",
-                "method": fill_nans_with_mean,
-                "train_test_value": None,
-            },
-        ],
-    )
-    fit_history = model.fit()
-    validation = model.validate()
-    print(validation)
-    make_and_evaluate_prediction(model)
 
 
 def load_data(filepath):
@@ -216,13 +215,17 @@ def make_and_evaluate_prediction(model):
     prediction_df["Survived_true"] = (
         model.validate_df["Survived"].reset_index().drop(columns="index")
     )
-    print(prediction_df)
+    # print(prediction_df)
     print(
         f"Hit rate = {get_hit_rate(prediction_df, 'Survived', 'Survived_true')}"
     )
     prediction_df = make_random_guess(prediction_df)
     print(
-        f"Hit rate random = {get_hit_rate(prediction_df, 'Survived', 'Survived_random')}"
+        f"Hit rate random = {get_hit_rate(prediction_df, 'Survived_random', 'Survived_true')}"
+    )
+    prediction_df = make_female_guess(prediction_df)
+    print(
+        f"Hit rate female = {get_hit_rate(prediction_df, 'Survived_female', 'Survived_true')}"
     )
 
 
@@ -236,6 +239,11 @@ def get_hit_rate(df, col1, col2):
 
 def make_random_guess(df):
     df["Survived_random"] = df["Survived"].apply(lambda x: round(random()))
+    return df
+
+
+def make_female_guess(df):
+    df["Survived_female"] = df["Sex_female"]
     return df
 
 
