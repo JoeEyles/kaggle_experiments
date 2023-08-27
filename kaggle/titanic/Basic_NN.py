@@ -8,7 +8,8 @@ from models import make_NN_model
 class Use_Model:
     def __init__(
         self,
-        df,
+        train_df,
+        validate_df,
         output_cols,
         scale_output=False,
         feature_cols=[],
@@ -22,16 +23,16 @@ class Use_Model:
         self.output_cols = output_cols
         self.fill_cols = fill_cols
 
-        self.output_cols_to_scale = _guess_cols_to_scale(df, self.output_cols)
         tf.keras.utils.set_random_seed(seed)
-        self.train_test_df, self.validate_df = _split_train_test_validate(
-            df, seed
-        )
+        self.train_test_df = train_df
+        self.validate_df = validate_df
 
+        self.output_cols_to_scale = _guess_cols_to_scale(
+            self.train_test_df, self.output_cols
+        )
         self.feature_cols, self.feature_cols_to_scale = get_feature_cols(
-            df, output_cols, feature_cols
+            self.train_test_df, output_cols, feature_cols
         )
-
         self.model = model(
             self.feature_cols,
             self.output_cols,
@@ -133,11 +134,11 @@ def _add_missing_one_hot_encoded_cols(in_predict_df, feature_cols):
     return in_predict_df
 
 
-def _split_train_test_validate(df, seed):
-    sample_proportion = 0.8
-    df_train_test = df.sample(frac=sample_proportion, random_state=seed)
-    df_validate = df.drop(df_train_test.index)
-    return df_train_test, df_validate
+# def _split_train_test_validate(df, seed):
+#     sample_proportion = 0.8
+#     df_train_test = df.sample(frac=sample_proportion, random_state=seed)
+#     df_validate = df.drop(df_train_test.index)
+#     return df_train_test, df_validate
 
 
 def _scale_df(scaler, df, cols, fit=False):

@@ -7,26 +7,33 @@ from models import make_RF_model, make_NN_model
 from Hyperparameter_Optimiser import Hyperparameter_Optimiser
 from Five_Fold_Stratification import Five_Fold_Stratification
 from Feature_Importance import Feature_Importance_Finder
-from feature_munger import (
-    one_hot_encode_col,
-    encode_cabin,
-    fill_nans_with_mean,
-    add_is_child_column,
-    encode_name,
-    add_fare_per_ticket_column,
-)
+from Data_Loader import Data_Loader
+
+# from feature_munger import (
+#     one_hot_encode_col,
+#     encode_cabin,
+#     fill_nans_with_mean,
+#     add_is_child_column,
+#     encode_name,
+#     add_fare_per_ticket_column,
+# )
 
 
 def main():
-    in_filepath = "kaggle_experiments/kaggle/titanic/data/train.csv"
-    df = load_data(in_filepath)
+    data_loader = Data_Loader(
+        "kaggle_experiments/kaggle/titanic/data/train.csv"
+    )
+    train_df, validate_df = data_loader.get_data_split()
 
     # TODO: don't bother with this, as we have test.csv
     # df_train_test_validate = df.sample(frac=0.8, random_state=42)
     # df_final_validate = df.drop(df_train_test_validate.index)
 
     # train_validate_predict(
-    #     df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
+    #     train_df,
+    #     validate_df,
+    #     model=make_NN_model,
+    #     model_args={"n_layers": 5, "n_nodes": 182},
     # )
     # optimise_model(
     #     df,
@@ -36,15 +43,16 @@ def main():
     # feature_importance(
     #     df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
     # )
-    make_submission(
-        df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
-    )
-
-    # train_validate_predict(
-    #     df,
-    #     model=make_RF_model,
-    #     model_args={"n_estimators": 100, "max_features": None},
+    # make_submission(
+    #     df, model=make_NN_model, model_args={"n_layers": 5, "n_nodes": 182}
     # )
+
+    train_validate_predict(
+        train_df,
+        validate_df,
+        model=make_RF_model,
+        model_args={"n_estimators": 100, "max_features": None},
+    )
     # optimise_model(
     #     df,
     #     model=make_RF_model,
@@ -59,11 +67,16 @@ def main():
     #         "max_features": [5, 10, 20, 30, 42],
     #     },
     # )
-    feature_importance(
-        df,
-        model=make_RF_model,
-        model_args={"n_estimators": 1000, "max_features": None},
-    )
+    # feature_importance(
+    #     df,
+    #     model=make_RF_model,
+    #     model_args={"n_estimators": 1000, "max_features": None},
+    # )
+    # make_submission(
+    #     df,
+    #     model=make_RF_model,
+    #     model_args={"n_estimators": 1000, "max_features": None},
+    # )
 
 
 def optimise_model(df, model=make_NN_model, model_args_range={}):
@@ -77,6 +90,16 @@ def optimise_model(df, model=make_NN_model, model_args_range={}):
                     "method": fill_nans_with_mean,
                     "train_test_value": None,
                 },
+                {
+                    "col": "Fare",
+                    "method": fill_nans_with_mean,
+                    "train_test_value": None,
+                },
+                {
+                    "col": "fare_per_ticket",
+                    "method": fill_nans_with_mean,
+                    "train_test_value": None,
+                },
             ],
             "model": model,
         },
@@ -87,42 +110,88 @@ def optimise_model(df, model=make_NN_model, model_args_range={}):
         metric_smaller_better=False,
     )
 
-    # TODO: the below belongs inside the optimiser class
-    # print(matrix_data)
-    # plt.scatter(
-    #     matrix_data["n_layers"],
-    #     matrix_data["n_nodes"],
-    #     c=matrix_data["validation"],
-    #     cmap="jet",
-    # )
-    # plt.xlabel("n_layers")
-    # plt.ylabel("n_nodes")
-    # plt.title("Hyperparameter Matrix Plot")
-    # plt.colorbar(label="Accuracy")
-    # plt.savefig(
-    #     "kaggle_experiments/kaggle/titanic/data_exploration/test_hyperparameter_matrix_plot.png"
-    # )  # Save the plot as an image file
 
-    # print(f"Best choice is {best_choice}")
-
-
-def train_validate_predict(df, model=make_NN_model, model_args={}):
+def train_validate_predict(
+    train_df, validate_df, model=make_NN_model, model_args={}
+):
     model = Use_Model(
-        df,
+        train_df,
+        validate_df,
         output_cols=[
             "Survived",
         ],
         model=model,
         model_args=model_args,
-        fill_cols=[
-            {
-                "col": "Age",
-                "method": fill_nans_with_mean,
-                "train_test_value": None,
-            },
+        # feature_cols=["PassengerId"],
+        # feature_cols1=[
+        #     "Pclass",
+        #     "Age",
+        #     "Parch",
+        #     "Fare",
+        #     "Sex_female",
+        #     "Sex_male",
+        #     "Embarked_C",
+        #     "Embarked_Q",
+        #     "Embarked_S",
+        #     "Pclass_3",
+        #     "Cabin_letter_A",
+        #     "Cabin_letter_B",
+        #     "Cabin_letter_C",
+        #     "Cabin_letter_G",
+        #     "Cabin_letter_T",
+        #     "title_Capt",
+        #     "title_Jonkheer",
+        #     "title_Major",
+        #     "title_Master",
+        #     "title_Mlle",
+        #     "title_Mme",
+        #     "title_Mr",
+        #     "title_Ms",
+        #     "title_Rev",
+        #     "title_the Countess",
+        #     "fare_per_ticket",
+        # ],
+        feature_cols=[
+            "Pclass",
+            "Age",
+            "Parch",
+            "Fare",
+            "Sex_female",
+            "Embarked_C",
+            "Embarked_Q",
+            "Embarked_S",
+            "Pclass_3",
+            "Cabin_letter_A",
+            "Cabin_letter_B",
+            "Cabin_letter_C",
+            "Cabin_letter_G",
+            "Cabin_letter_T",
+            "title_Major",
+            "title_Master",
+            "title_Mr",
+            "title_Rev",
+            "fare_per_ticket",
         ],
     )
     fit_history = model.fit()
+
+    results_df = pd.DataFrame(
+        data={
+            "feature": model.feature_cols,
+            "importance": model.model.forest.feature_importances_,
+        }
+    )
+    results_df_sorted = results_df.sort_values("importance", ascending=False)
+    plt.bar(results_df_sorted["feature"], results_df_sorted["importance"])
+    plt.xlabel("Feature")
+    # plt.ylabel(f"Importance (difference from baseline of {baseline})")
+    plt.title("Feature importance bar chart")
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(
+        "kaggle_experiments/kaggle/titanic/data_exploration/feature_importance_rf_test.png"
+    )  # Save the plot as an
+
     validation = model.validate()
     print(validation)
     make_and_evaluate_prediction(model)
@@ -138,9 +207,40 @@ def make_submission(train_df, model, model_args):
         ],
         model=model,
         model_args=model_args,
+        feature_cols=[
+            "Pclass",
+            "Age",
+            "Parch",
+            "Fare",
+            "fare_per_ticket",
+            "Sex_female",
+            "Embarked_C",
+            "Embarked_Q",
+            "Embarked_S",
+            "Pclass_3",
+            "Cabin_letter_A",
+            "Cabin_letter_B",
+            "Cabin_letter_C",
+            "Cabin_letter_G",
+            "Cabin_letter_T",
+            "title_Major",
+            "title_Master",
+            "title_Mr",
+            "title_Rev",
+        ],
         fill_cols=[
             {
                 "col": "Age",
+                "method": fill_nans_with_mean,
+                "train_test_value": None,
+            },
+            {
+                "col": "Fare",
+                "method": fill_nans_with_mean,
+                "train_test_value": None,
+            },
+            {
+                "col": "fare_per_ticket",
                 "method": fill_nans_with_mean,
                 "train_test_value": None,
             },
@@ -155,10 +255,10 @@ def make_submission(train_df, model, model_args):
     )
     prediction_df["PassengerId"] = prediction_df["PassengerId"].astype(int)
     submission_df = prediction_df[["PassengerId", "Survived"]]
-    # submission_df.to_csv(
-    #     "kaggle_experiments/kaggle/titanic/submissions/first_NN.csv",
-    #     index=False,
-    # )
+    submission_df.to_csv(
+        "kaggle_experiments/kaggle/titanic/submissions/RF_selected_features.csv",
+        index=False,
+    )
 
 
 def feature_importance(df, model=make_NN_model, model_args={}):
@@ -172,8 +272,46 @@ def feature_importance(df, model=make_NN_model, model_args={}):
                     "method": fill_nans_with_mean,
                     "train_test_value": None,
                 },
+                {
+                    "col": "Fare",
+                    "method": fill_nans_with_mean,
+                    "train_test_value": None,
+                },
+                {
+                    "col": "fare_per_ticket",
+                    "method": fill_nans_with_mean,
+                    "train_test_value": None,
+                },
             ],
             # "feature_cols": ["Age", "SibSp", "Parch", "Sex_female"],
+            # "feature_cols": [
+            #     "Pclass",
+            #     "Age",
+            #     "Parch",
+            #     "Fare",
+            #     "Sex_female",
+            #     "Sex_male",
+            #     "Embarked_C",
+            #     "Embarked_Q",
+            #     "Embarked_S",
+            #     "Pclass_3",
+            #     "Cabin_letter_A",
+            #     "Cabin_letter_B",
+            #     "Cabin_letter_C",
+            #     "Cabin_letter_G",
+            #     "Cabin_letter_T",
+            #     "title_Capt",
+            #     "title_Jonkheer",
+            #     "title_Major",
+            #     "title_Master",
+            #     "title_Mlle",
+            #     "title_Mme",
+            #     "title_Mr",
+            #     "title_Ms",
+            #     "title_Rev",
+            #     "title_the Countess",
+            #     "fare_per_ticket",
+            # ],
         },
     )
     baseline, results_df = finder.get_feaure_importance(
@@ -190,21 +328,21 @@ def feature_importance(df, model=make_NN_model, model_args={}):
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.savefig(
-        "kaggle_experiments/kaggle/titanic/data_exploration/test_feature_importance.png"
+        "kaggle_experiments/kaggle/titanic/data_exploration/feature_importance_rf_stratified_reduced1.png"
     )  # Save the plot as an
 
 
-def load_data(filepath):
-    df = pd.read_csv(filepath)
-    df = one_hot_encode_col(df, "Sex")
-    df = one_hot_encode_col(df, "Embarked")
-    df = one_hot_encode_col(df, "Pclass")
-    df = encode_cabin(df)
-    df = add_is_child_column(df)
-    df = encode_name(df)
-    df = add_fare_per_ticket_column(df)
-    del df["Cabin_number"]  # TODO: how do we fill these blanks?
-    return df
+# def load_data(filepath):
+#     df = pd.read_csv(filepath)
+#     df = one_hot_encode_col(df, "Sex")
+#     df = one_hot_encode_col(df, "Embarked")
+#     df = one_hot_encode_col(df, "Pclass")
+#     df = encode_cabin(df)
+#     df = add_is_child_column(df)
+#     df = encode_name(df)
+#     df = add_fare_per_ticket_column(df)
+#     del df["Cabin_number"]  # TODO: how do we fill these blanks?
+#     return df
 
 
 def make_and_evaluate_prediction(model):
