@@ -72,6 +72,60 @@ class Pipeline:
         print(f"Voted Hit rate = {hit_rate}")
         self.experiment.log_validation(None, hit_rate)
 
+    def make_submission(self, test_data_loader, out_filepath):
+        submission_df = pd.DataFrame()
+        for nn_idx in range(len(self.basic_nns)):
+            (
+                train_df_X,
+                train_df_Y,
+                _,
+                _,
+            ) = self.data_loader.get_data_split(  # TODO: passing these in is pretty ugly...
+                self.basic_nns[nn_idx].feature_cols,
+                self.basic_nns[nn_idx].output_cols,
+                self.basic_nns[nn_idx].cols_to_scale,
+                all_data_to_train=True,
+            )
+            self.basic_nns[nn_idx].fit(train_df_X, train_df_Y)
+
+            (
+                test_df_X,
+                _,
+                _,
+                _,
+            ) = test_data_loader.get_data_split(  # TODO: passing these in is pretty ugly...
+                self.basic_nns[nn_idx].feature_cols,
+                [],
+                self.basic_nns[nn_idx].cols_to_scale,
+                all_data_to_train=True,
+            )  # TODO: it would be better to scale using the original trained data's values
+            new_prediction_df = self.basic_nns[nn_idx].predict(test_df_X)
+            # new_prediction_df = train_data_loader.unscale_data(  # TODO: it would be better to unscale using the original trained data's values
+            #     submission_df,
+            #     self.basic_nns[
+            #         nn_idx
+            #     ].cols_to_scale,  # TODO: passing these in is pretty ugly...
+            # )
+            new_prediction_df["Transported"] = new_prediction_df[
+                "Transported"
+            ].apply(lambda x: round(x))
+            if submission_df.empty:
+                submission_df["Transported"] = new_prediction_df["Transported"]
+                submission_df["PassengerId"] = test_data_loader.df[
+                    "PassengerId"
+                ]
+            else:
+                submission_df["Transported"] += new_prediction_df[
+                    "Transported"
+                ]
+        submission_df["Transported"] = (
+            submission_df["Transported"] / len(self.basic_nns)
+        ).apply(lambda x: round(x))
+        submission_df["Transported"] = submission_df["Transported"].astype(
+            bool
+        )
+        submission_df.to_csv(out_filepath, index=False)
+
     def run_hyperparameter_optimisation_experiment(self):
         pass
 

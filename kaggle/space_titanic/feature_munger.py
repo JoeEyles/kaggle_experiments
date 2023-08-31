@@ -49,6 +49,9 @@ def fill_nans_with_basic_ml_regression(df, col_name, feature_cols, model=None):
 
 
 def fill_nans_with_mean_grouped(df, col_name, group_cols, means=None):
+    raise IndexError(
+        "This shuffles the array into a different order, which causes problems with the submission"
+    )
     if means is None:
         means = df.groupby(group_cols)[col_name].mean()
         means.name = "mean"

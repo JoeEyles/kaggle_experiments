@@ -45,7 +45,8 @@ class Basic_NN:
             verbose=verbose,
         )
 
-    def predict(self, predict_df_X=None, verbose="auto"):
+    def predict(self, predict_df_X, verbose="auto"):
         output = self.model.predict(predict_df_X, verbose=verbose)
         output_df = pd.DataFrame(output, columns=self.output_cols)
+        # output_df.index = predict_df_X.index
         return output_df

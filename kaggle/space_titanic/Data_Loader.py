@@ -39,8 +39,15 @@ class Data_Loader:
         output_cols,
         cols_to_scale=[],
         fold=0,
+        all_data_to_train=False,
     ):
-        train_df, validate_df = _split_data(self.df.copy(), self.seed, fold)
+        if all_data_to_train:
+            train_df = self.df.copy()
+            validate_df = pd.DataFrame()
+        else:
+            train_df, validate_df = _split_data(
+                self.df.copy(), self.seed, fold
+            )
         train_df, validate_df = _fill_gaps_simple_ml(train_df, validate_df)
         train_df, validate_df = _feature_engineering(train_df, validate_df)
         validate_df = _add_missing_one_hot_encoded_cols(
@@ -62,20 +69,27 @@ class Data_Loader:
         validate_df_Y = self._select_expanded_cols_from_df(
             validate_df, output_cols
         )
-        validate_df_X = validate_df_X.reindex(train_df_X.columns, axis=1)
-        validate_df_Y = validate_df_Y.reindex(train_df_Y.columns, axis=1)
+        if not validate_df.empty:
+            validate_df_X = validate_df_X.reindex(train_df_X.columns, axis=1)
+            validate_df_Y = validate_df_Y.reindex(train_df_Y.columns, axis=1)
         return train_df_X, train_df_Y, validate_df_X, validate_df_Y
 
     def unscale_data(self, df, cols_to_scale):
+        if df.empty:
+            return df
         df = self._unscale_df(df, _expand_cols(cols_to_scale, df))
         return df
 
     def _select_expanded_cols_from_df(self, df, col_list):
+        if df.empty:
+            return df
         expanded_col_list = _expand_cols(col_list, df)
         return df[expanded_col_list]
 
     def _scale_df(self, df, cols, fit=False):
         if not cols:
+            return df
+        if df.empty:
             return df
         scaled_df = df.copy()
         scaled_df.reset_index(drop=True, inplace=True)
@@ -168,9 +182,10 @@ def _fill_gaps_simple_ml(train_df, validate_df):
         train_df, mode = fill_nans_with_basic_ml_classifier(
             train_df, col, fill_features
         )
-        validate_df, _ = fill_nans_with_basic_ml_classifier(
-            validate_df, col, fill_features, mode
-        )
+        if not validate_df.empty:
+            validate_df, _ = fill_nans_with_basic_ml_classifier(
+                validate_df, col, fill_features, mode
+            )
     for col in [
         "Age",
         "RoomService",
@@ -179,30 +194,37 @@ def _fill_gaps_simple_ml(train_df, validate_df):
         "VRDeck",
         "FoodCourt",
     ]:
-        train_df, means = fill_nans_with_mean_grouped(
+        train_df, means = fill_nans_with_mean(  # fill_nans_with_mean_grouped(
             train_df,
             col,
-            ["VIP", "CryoSleep"],
+            # ["VIP", "CryoSleep"],
         )
-        validate_df, _ = fill_nans_with_mean_grouped(
-            validate_df,
-            col,
-            ["VIP", "CryoSleep"],
-            means,
-        )
+        if not validate_df.empty:
+            (
+                validate_df,
+                _,
+            ) = fill_nans_with_mean(  # fill_nans_with_mean_grouped(
+                validate_df,
+                col,
+                # ["VIP", "CryoSleep"],
+                means,
+            )
     return train_df, validate_df
 
 
 def _feature_engineering(train_df, validate_df):
     train_df = encode_cabin(train_df)
-    validate_df = encode_cabin(validate_df)
+    if not validate_df.empty:
+        validate_df = encode_cabin(validate_df)
 
     train_df = get_passenger_group_size(train_df)
-    validate_df = get_passenger_group_size(validate_df)
+    if not validate_df.empty:
+        validate_df = get_passenger_group_size(validate_df)
 
     for col in ["HomePlanet", "Destination", "GroupSize"]:
         train_df = one_hot_encode_col(train_df, col)
-        validate_df = one_hot_encode_col(validate_df, col)
+        if not validate_df.empty:
+            validate_df = one_hot_encode_col(validate_df, col)
 
     train_df["TotalSpend"] = (
         train_df["RoomService"]
@@ -211,13 +233,14 @@ def _feature_engineering(train_df, validate_df):
         + train_df["Spa"]
         + train_df["VRDeck"]
     )
-    validate_df["TotalSpend"] = (
-        validate_df["RoomService"]
-        + validate_df["FoodCourt"]
-        + validate_df["ShoppingMall"]
-        + validate_df["Spa"]
-        + validate_df["VRDeck"]
-    )
+    if not validate_df.empty:
+        validate_df["TotalSpend"] = (
+            validate_df["RoomService"]
+            + validate_df["FoodCourt"]
+            + validate_df["ShoppingMall"]
+            + validate_df["Spa"]
+            + validate_df["VRDeck"]
+        )
 
     for col in [
         "RoomService",
@@ -228,17 +251,22 @@ def _feature_engineering(train_df, validate_df):
         "TotalSpend",
     ]:
         train_df = split_row_between_group(train_df, col)
-        validate_df = split_row_between_group(validate_df, col)
+        if not validate_df.empty:
+            validate_df = split_row_between_group(validate_df, col)
 
     train_df = get_most_common_ship_location(train_df)
-    validate_df = get_most_common_ship_location(validate_df)
+    if not validate_df.empty:
+        validate_df = get_most_common_ship_location(validate_df)
 
     train_df = one_hot_encode_col(train_df, "MostCommonShipLocation")
-    validate_df = one_hot_encode_col(validate_df, "MostCommonShipLocation")
+    if not validate_df.empty:
+        validate_df = one_hot_encode_col(validate_df, "MostCommonShipLocation")
     return train_df, validate_df
 
 
 def _add_missing_one_hot_encoded_cols(df, feature_cols):
+    if df.empty:
+        return df
     missing_cols = set(feature_cols) - set(df.columns)
     for col in missing_cols:
         df[col] = 0
